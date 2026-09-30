@@ -1,0 +1,469 @@
+# Session registry for the calf play-behaviour dataset
+# (https://huggingface.co/datasets/Sonam5/Calf-Play-Behavior-Dataset).
+#
+# Every notebook in ../notebooks reads this file. It records, per released session, the inputs and the
+# parameters with which the released data were produced. Change only the `paths` block (and `layout`)
+# to run the notebooks on your own copy of the data.
+#
+# Sessions: the 7 decoded sessions (frames, frame index, tracking) and the 2 annotation-only sessions.
+# Farm codes: Tol = research and teaching dairy farm (visits Tol = April 2024, Tol2 = June 2024, Tol3 = May 2025);
+#             Eem = commercial dairy farm (June 2024). All times are local camera-clock time.
+
+paths:
+  data_root: /path/to/Calf-Play-Behavior-Dataset   # input data (see `layout`)
+  output_root: /path/to/output                     # every notebook writes below this folder
+  model_root: /path/to/models                      # yolo12x.pt, sam2.1_hiera_large.pt
+  layout: release                                  # 'release' or 'original' (see `layouts`)
+
+# Folder layouts. `release` is the layout of the Hugging Face dataset after extracting each frame tar
+# frames/<session_id>/<session_id>_video<NNN>.tar into frames/<session_id>/video<N>/ (see README).
+# `original` is the layout of the cloud storage on which the pipeline ran.
+layouts:
+  release:
+    video: "{data_root}/videos/{visit}/*/{filename}"            # resolved with glob (date sub-folder)
+    frames_dir: "{data_root}/frames/{session_id}"
+    event_log: "{data_root}/annotations/event_logs/{session_id}.csv"
+    initial_prompts_dir: "{data_root}/tracking/{session_id}/initial_prompts"
+    frame_index: "{data_root}/metadata/frame_index/{session_id}.csv.gz"
+  original:
+    video: "{data_root}/{visit}/Videos/{filename}"
+    frames_dir: "{data_root}/{visit}/Decoded Frames/{decoded_folder}"
+    event_log: "{data_root}/{visit}/{source}"                  # the Observer XT export listed under event_log.source
+    initial_prompts_dir: "{data_root}/{visit}/Initial Prompts/{decoded_folder}"
+    frame_index: "{output_root}/metadata/frame_index/{session_id}.csv.gz"
+
+# Output folders (relative to paths.output_root) and the matching dataset folders.
+outputs:
+  frames: frames                    # 01 -> frames/<session_id>/video<k>/<NNNNNNN>.jpg   (dataset: frames/)
+  ocr: ocr                          # 02 -> ocr/<session_id>/metadata.csv|parquet
+  frame_index: metadata/frame_index # 03 -> metadata/frame_index/<session_id>.csv.gz    (dataset: metadata/frame_index/)
+  initial_prompts: initial_prompts  # 04 -> initial_prompts/<session_id>/BoundingBoxes_*.txt
+  tracking: tracking                # 05 -> tracking/<session_id>/masks/video<k>/annotations_<calf>.json (dataset: tracking/)
+  observer_csv: observer_csv        # 06 -> observer_csv/<file>.csv (xlsx converted to csv)
+  per_calf_states: per_calf_states  # 06 -> per_calf_states/<table>.csv   (intermediate, not published)
+  labels: labels                    # 07 -> labels/<session_id>.csv       (dataset: annotations/labels/, via 08)
+  release: release                  # 08 -> staging area, manifests and upload state (dataset: all folders)
+
+# Parameters shared by all decoded sessions (01_decode_frames).
+decode_defaults:
+  stride: 5                    # keep every 5th decoded video frame (counter restarts for every video)
+  max_frames_per_folder: 3000  # frames per sub-folder video1, video2, ...
+  jpeg: "cv2.imwrite default"  # OpenCV JPEG default quality (95), no resizing
+
+# Quality-control checks of the OCR readings (09_qc_tables). Nothing is corrected; the checks only count.
+qc:
+  window_slack_min: 5      # a Success reading outside the session's recording window (qc_window) +- 5 min is implausible
+  neighbours: 25           # ... or one more than jump_s seconds from the median of 25 Success readings on each side
+  jump_s: 60
+  rerun_sample: 40         # frames per session (evenly spaced) for the OCR re-run check
+
+# 3-class mapping of the Observer XT behaviours (06 and 07). Unlisted behaviours map to 'Not Playing'.
+behavior_categories:
+  Buck: Active Playing
+  gallop: Active Playing
+  Kick: Active Playing
+  leap: Active Playing
+  leap sideways: Active Playing
+  Turn: Active Playing
+  Jump: Active Playing
+  chasing: Active Playing
+  bouncing: Non Active Playing
+  head-butting: Non Active Playing
+  head-shake: Non Active Playing
+  butting fixtures: Non Active Playing
+  butting/rubbing straw: Non Active Playing
+  mount: Non Active Playing
+  frontal pushing: Non Active Playing
+  play-bouncing: Non Active Playing
+  Individuall: Not Playing
+  Milk Feeding: Not Playing
+  rest behavior: Not Playing
+  out of view: Not Playing
+  Management (someone in the stalls): Not Playing
+  Management (someone in the pen): Not Playing
+  (Blanks): Not Playing
+
+# Observer XT exports that were turned into per-calf state tables (06_prepare_annotations; intermediate tables).
+# `time_relative_parser` names the parser variant that was used for that export (both give identical results
+# for the formats present: 'MM:SS.f' in Tol/Tol2 exports, '0 days HH:MM:SS.ffffff' in Eem/Tol3 exports).
+annotation_exports:
+  - table: Tol_2024-04-24
+    original_file: GroundTruth_Tol_Ch01_20240424_054840_20240424_104652.csv
+    visit: Tol
+    release_sessions: [Tol_2024-04-24]
+    time_relative_parser: tenths
+    split: null
+  - table: Tol2_2024-06-11
+    original_file: GroundTruth_Tol2_Ch01_20240611_060936_20240611_235954.csv   # whole-day export
+    visit: Tol2
+    release_sessions: [Tol2_2024-06-11_AM, Tol2_2024-06-11_PM]
+    time_relative_parser: tenths
+    split: {column: Timestamp, at: "2024-06-11T13:20:00", before: Tol2_2024-06-11_AM, after: Tol2_2024-06-11_PM}
+  - table: Eem_2024-06-18
+    original_file: GroundTruth_Eem_Ch04_20240618_125115_20240618_230610.csv
+    visit: Eem
+    release_sessions: [Eem_2024-06-18]
+    time_relative_parser: timedelta
+    split: null
+  - table: Eem_2024-06-19
+    original_file: GroundTruth_Eem_Ch04_20240619_060343_20240619_235951.csv
+    visit: Eem
+    release_sessions: [Eem_2024-06-19]
+    time_relative_parser: timedelta
+    split: null
+
+sessions:
+
+  # ------------------------------------------------------------------ annotation-only sessions
+  Tol_2024-04-18:
+    visit: Tol
+    date: "2024-04-18"
+    decoded: false
+    note: >-
+      Pilot day with one focal calf ('Two spots 2643') coded in detail; never decoded.
+    event_log:
+      source: Extra/EventLogs_Sen98405_Tol_20240418-092731-235545.xlsx   # read with pandas (xlsx -> csv)
+      rename_columns: {tijdstip opname: Actual date and start time}      # the pilot's start-time column
+      drop_filled_calf_id_column: true   # 'calf ID' repeats the focal calf here (empty in all other exports)
+      observation_start_override: {Tol_18_0927: "2024-04-18T09:27:31.000"}   # no typed start; start of its video
+
+  Eem_2024-06-20:
+    visit: Eem
+    date: "2024-06-20"
+    decoded: false
+    note: >-
+      All five calves annotated, never decoded. 'Actual date and start time' is empty in 22 of the 34
+      observations and mistyped in 2; the observation name is the name of the video file.
+    event_log:
+      source: GroundTruth_Eem_20240620_060135_243033.csv
+      observation_start_from_name: true   # use the start in the observation (= video file) name where the typed start is empty or differs
+
+  # ------------------------------------------------------------------ decoded sessions
+  Tol_2024-04-24:
+    visit: Tol
+    date: "2024-04-24"
+    decoded: true
+    resolution: [2304, 1296]
+    source_fps: 25
+    decode:
+      folder: Tol_ch01_0424_054840_104652     # original frame-folder name
+      first_frame_index: 1
+      n_frames: 89571
+      n_chunks: 30
+      videos:
+        - Tol_ch01-20240424-054842-061639.mp4
+        - Tol_ch01-20240424-061639-065039.mp4
+        - Tol_ch01-20240424-065039-072441.mp4
+        - Tol_ch01-20240424-072441-075824.mp4
+        - Tol_ch01-20240424-075824-083203.mp4
+        - Tol_ch01-20240424-083203-090542.mp4
+        - Tol_ch01-20240424-090542-093922.mp4
+        - Tol_ch01-20240424-093922-101306.mp4
+        - Tol_ch01-20240424-101306-104651.mp4
+    ocr:
+      roi: [1010, 0, 1273, 40]      # x1, y1, x2, y2
+      clock_style: mdy_space        # overlay 'MM/DD/YYYY HH:MM:SS', stored as 'DD/MM/YYYY HH:MM:SS'
+      qc_window: ["2024-04-24T05:48:42", "2024-04-24T10:46:51"]   # first video start .. last video end
+      table: original
+      original_table: Tol/metadata/Tol_ch01_0424_054840_104652/metadata.parquet   # the first OCR table (02 output), original layout
+    tracking:
+      prompt_file: BoundingBoxes_Tol_054840_104652.txt
+      chunks: [1, 30]
+      calves_tracked: [Black 2644, Half half 2642, Two spots 2643]
+      note: "'White 2626' is listed in the prompt file but has no masks."
+    event_log:
+      source: GroundTruth_Tol_Ch01_20240424_054840_20240424_104652.csv
+    labels: true
+
+  Tol2_2024-06-11_AM:
+    visit: Tol2
+    date: "2024-06-11"
+    decoded: true
+    resolution: [1280, 720]
+    source_fps: 25
+    decode:
+      folder: Tol2_0611_060936_131254
+      first_frame_index: 15001
+      n_frames: 111860
+      n_chunks: 38                  # video6 .. video43
+      note: >-
+        Frames 0000001-0015000 (06:09:36 until the first retained frame 0015001, clock 06:59:40) were deleted
+        before release. The decoding cell of this session was not preserved; the video list below is the
+        list used for this session elsewhere in the pipeline, and the frame numbering is continuous
+        (frame 0015001 shows 06:59:40 = 06:09:36 + 15000 frames / 5 frames per s).
+      videos:
+        - Tol2_ch04_20240611_060936_064320.mp4
+        - Tol2_ch04_20240611_064320_071704.mp4
+        - Tol2_ch04_20240611_071704_075048.mp4
+        - Tol2_ch04_20240611_075048_082432.mp4
+        - Tol2_ch04_20240611_082432_085816.mp4
+        - Tol2_ch04_20240611_085816_093200.mp4
+        - Tol2_ch04_20240611_093200_100544.mp4
+        - Tol2_ch04_20240611_100544_103928.mp4
+        - Tol2_ch04_20240611_103928_111312.mp4
+        - Tol2_ch04_20240611_111312_114656.mp4
+        - Tol2_ch04_20240611_114656_120801.mp4
+        - Tol2_ch04_20240611_120801_124145.mp4
+        - Tol2_ch04_20240611_124145_131254.mp4
+    ocr:
+      roi: [463, 33, 767, 65]
+      clock_style: dmy_nospace      # overlay 'DD/MM/YYYY HH:MM:SS', stored as 'DD/MM/YYYYHH:MM:SS'
+      qc_window: ["2024-06-11T06:59:40", "2024-06-11T13:12:54"]   # from the first retained frame 0015001
+      table: original
+      original_table: Tol2/metadata/Tol2_0611_060936_131254/metadata.parquet   # the first OCR table (02 output), original layout
+    tracking:
+      prompt_file: BoundingBoxes_Tol2_065941_131254.txt
+      chunks: [6, 43]
+      calves_tracked: [Black 2644, Half half 2642]
+      note: "The released prompt file lists four calves; masks exist for the two calves above."
+    event_log:
+      source: GroundTruth_Tol2_Ch01_20240611_060936_20240611_235954.csv   # whole day, split by observation start
+      split: {part: AM, column: Actual date and start time, at: "13:20:00"}
+    labels: true
+
+  Tol2_2024-06-11_PM:
+    visit: Tol2
+    date: "2024-06-11"
+    decoded: true
+    resolution: [1280, 720]
+    source_fps: 25
+    decode:
+      folder: Tol2_ch01_0611_133427_235956
+      first_frame_index: 1
+      n_frames: 177111
+      n_chunks: 60
+      note: "Tol2_ch04_20240611_164646_172030.mp4 is truncated (no moov atom); OpenCV cannot open it and it is skipped."
+      videos:
+        - Tol2_ch04_20240611_133427_140633.mp4
+        - Tol2_ch04_20240611_140633_144017.mp4
+        - Tol2_ch04_20240611_144017_150535.mp4
+        - Tol2_ch04_20240611_150535_153919.mp4
+        - Tol2_ch04_20240611_153919_161302.mp4
+        - Tol2_ch04_20240611_161302_164646.mp4
+        - Tol2_ch04_20240611_164646_172030.mp4
+        - Tol2_ch04_20240611_172030_175414.mp4
+        - Tol2_ch04_20240611_175414_182758.mp4
+        - Tol2_ch04_20240611_182758_184903.mp4
+        - Tol2_ch04_20240611_184903_192247.mp4
+        - Tol2_ch04_20240611_192247_195631.mp4
+        - Tol2_ch04_20240611_195631_203015.mp4
+        - Tol2_ch04_20240611_203015_210359.mp4
+        - Tol2_ch04_20240611_210359_213743.mp4
+        - Tol2_ch04_20240611_213743_221127.mp4
+        - Tol2_ch04_20240611_221127_224511.mp4
+        - Tol2_ch04_20240611_224511_231855.mp4
+        - Tol2_ch04_20240611_231855_235239.mp4
+        - Tol2_ch04_20240611_235239_235956.mp4
+    ocr:
+      roi: [465, 30, 770, 65]
+      clock_style: dmy_nospace
+      qc_window: ["2024-06-11T13:34:27", "2024-06-11T23:59:56"]   # first video start .. last video end
+      table: original
+      original_table: Tol2/metadata/Tol2_ch01_0611_133427_235956/metadata.parquet   # the first OCR table (02 output), original layout
+    tracking:
+      prompt_file: BoundingBoxes_Tol2_133427_235956.txt
+      prompt_detection_filter: {class: cow, min_confidence: 0.55}   # 04: prompts from frame 0006001 (first frame of video3)
+      chunks: [3, 60]
+      calves_tracked: [Black 2644, Half half 2642]
+      note: "The released prompt file lists four calves; masks exist for the two calves above."
+    event_log:
+      source: GroundTruth_Tol2_Ch01_20240611_060936_20240611_235954.csv
+      split: {part: PM, column: Actual date and start time, at: "13:20:00"}
+    labels: true
+
+  Tol2_2024-06-12:
+    visit: Tol2
+    date: "2024-06-12"
+    decoded: true
+    resolution: [1280, 720]
+    source_fps: 25
+    decode:
+      folder: Tol2_ch04_0612_060343_103335
+      first_frame_index: 1
+      n_frames: 80884
+      n_chunks: 27
+      videos:
+        - Tol2_ch04_20240612_060343_063727.mp4
+        - Tol2_ch04_20240612_063727_071111.mp4
+        - Tol2_ch04_20240612_071111_074455.mp4
+        - Tol2_ch04_20240612_074455_081839.mp4
+        - Tol2_ch04_20240612_081839_085223.mp4
+        - Tol2_ch04_20240612_085223_092607.mp4
+        - Tol2_ch04_20240612_092607_095951.mp4
+        - Tol2_ch04_20240612_095951_103335.mp4
+    ocr:
+      roi: [463, 33, 767, 65]
+      clock_style: dmy_nospace
+      qc_window: ["2024-06-12T06:03:43", "2024-06-12T10:33:35"]   # first video start .. last video end
+      table: re-run                 # OCR run with 02 on the release environment (no earlier table existed)
+    tracking:
+      prompt_file: BoundingBoxes_Tol2_ch04_0612_060343_103335.txt
+      chunks: null                  # initial prompts only, no masks
+      calves_tracked: []
+    event_log:
+      source: GroundTruth_Tol2_Ch01_20240612_060343_20240612_103333.csv
+    labels: false
+
+  Tol3_2025-05-12:
+    visit: Tol3
+    date: "2025-05-12"
+    decoded: true
+    resolution: [1920, 1080]
+    source_fps: 12                  # stride 5 -> 2.4 decoded frames per second
+    decode:
+      folder: Tol3_ch01_0512_062129_230127
+      first_frame_index: 1
+      n_frames: 143880
+      n_chunks: 48
+      videos:
+        - Tol3_ch01_20250512_062129_065515.mp4
+        - Tol3_ch01_20250512_065515_070341.mp4
+        - Tol3_ch01_20250512_070341_073727.mp4
+        - Tol3_ch01_20250512_073727_081113.mp4
+        - Tol3_ch01_20250512_081113_084458.mp4
+        - Tol3_ch01_20250512_084458_091844.mp4
+        - Tol3_ch01_20250512_091844_095230.mp4
+        - Tol3_ch01_20250512_095230_102616.mp4
+        - Tol3_ch01_20250512_102616_110002.mp4
+        - Tol3_ch01_20250512_110002_113347.mp4
+        - Tol3_ch01_20250512_113347_120733.mp4
+        - Tol3_ch01_20250512_120733_124119.mp4
+        - Tol3_ch01_20250512_124119_131505.mp4
+        - Tol3_ch01_20250512_131505_134851.mp4
+        - Tol3_ch01_20250512_134851_142236.mp4
+        - Tol3_ch01_20250512_142236_145622.mp4
+        - Tol3_ch01_20250512_145622_153008.mp4
+        - Tol3_ch01_20250512_153008_160354.mp4
+        - Tol3_ch01_20250512_160354_163740.mp4
+        - Tol3_ch01_20250512_163740_171125.mp4
+        - Tol3_ch01_20250512_171125_174511.mp4
+        - Tol3_ch01_20250512_174511_181857.mp4
+        - Tol3_ch01_20250512_181857_185243.mp4
+        - Tol3_ch01_20250512_185243_192628.mp4
+        - Tol3_ch01_20250512_192628_200013.mp4
+        - Tol3_ch01_20250512_200013_203359.mp4
+        - Tol3_ch01_20250512_203359_210745.mp4
+        - Tol3_ch01_20250512_210745_213857.mp4
+        - Tol3_ch01_20250512_213857_222052.mp4
+        - Tol3_ch01_20250512_222052_230127.mp4
+    ocr:
+      roi: [725, 20, 1295, 90]      # the only adapted OCR parameter: Tol3 frames are 1920x1080
+      clock_style: dmy_nospace
+      qc_window: ["2025-05-12T06:21:29", "2025-05-12T23:01:27"]   # first video start .. last video end
+      table: re-run
+    tracking:
+      prompt_file: BoundingBoxes_Tol3_ch01_0512_062129_230127.txt
+      chunks: null
+      calves_tracked: []
+    event_log:
+      source: GroundTruth_Tol3_Ch01_20250512_062129_20250512_230127.csv
+    labels: false
+
+  Eem_2024-06-18:
+    visit: Eem
+    date: "2024-06-18"
+    decoded: true
+    resolution: [1280, 720]
+    source_fps: 25
+    decode:
+      folder: Eem_ch04_0618_130318_230616
+      first_frame_index: 1
+      n_frames: 180485
+      n_chunks: 61
+      note: "The first video of the annotated window (Eem_ch04_20240618_122934_130318.mp4) was not in the decode list."
+      videos:
+        - Eem_ch04_20240618_130318_133702.mp4
+        - Eem_ch04_20240618_133702_141046.mp4
+        - Eem_ch04_20240618_141046_144430.mp4
+        - Eem_ch04_20240618_144430_151814.mp4
+        - Eem_ch04_20240618_151814_155158.mp4
+        - Eem_ch04_20240618_155158_162541.mp4
+        - Eem_ch04_20240618_162541_165925.mp4
+        - Eem_ch04_20240618_165925_173309.mp4
+        - Eem_ch04_20240618_173309_180240.mp4
+        - Eem_ch04_20240618_180240_183624.mp4
+        - Eem_ch04_20240618_183624_191008.mp4
+        - Eem_ch04_20240618_191008_194352.mp4
+        - Eem_ch04_20240618_194352_201736.mp4
+        - Eem_ch04_20240618_201736_205120.mp4
+        - Eem_ch04_20240618_205120_212504.mp4
+        - Eem_ch04_20240618_212504_215848.mp4
+        - Eem_ch04_20240618_215848_223232.mp4
+        - Eem_ch04_20240618_223232_230616.mp4
+    ocr:
+      roi: [465, 30, 770, 65]
+      clock_style: dmy_nospace
+      qc_window: ["2024-06-18T13:03:18", "2024-06-18T23:06:16"]   # first video start .. last video end
+      table: original
+      original_table: Eem/metadata/metadata.parquet   # the first OCR table (02 output), original layout
+    tracking:
+      prompt_file: BoundingBoxes_Eem_ch04_0618_130318_230616.txt
+      chunks: [19, 61]
+      calves_tracked: ["5, green 1, hind white", "6, blue 2, white band", "7, red 3, one white spot", "8, white", "9, black"]
+    event_log:
+      source: GroundTruth_Eem_Ch04_20240618_125115_20240618_230610.csv
+    labels: false
+
+  Eem_2024-06-19:
+    visit: Eem
+    date: "2024-06-19"
+    decoded: true
+    resolution: [1280, 720]
+    source_fps: 25
+    decode:
+      folder: Eem_ch04_0619_060343_235956
+      first_frame_index: 1
+      n_frames: 322319              # index 0000001-0322320; frame 0095169 missing
+      n_chunks: 108
+      videos:
+        - Eem_ch04_20240619_060343_063727.mp4
+        - Eem_ch04_20240619_063727_071111.mp4
+        - Eem_ch04_20240619_071111_074455.mp4
+        - Eem_ch04_20240619_074455_081839.mp4
+        - Eem_ch04_20240619_081839_085223.mp4
+        - Eem_ch04_20240619_085223_092607.mp4
+        - Eem_ch04_20240619_092607_095951.mp4
+        - Eem_ch04_20240619_095951_103335.mp4
+        - Eem_ch04_20240619_103335_110719.mp4
+        - Eem_ch04_20240619_110719_114103.mp4
+        - Eem_ch04_20240619_114103_120208.mp4
+        - Eem_ch04_20240619_120208_123552.mp4
+        - Eem_ch04_20240619_123552_130936.mp4
+        - Eem_ch04_20240619_130936_134320.mp4
+        - Eem_ch04_20240619_134320_141704.mp4
+        - Eem_ch04_20240619_141704_145048.mp4
+        - Eem_ch04_20240619_145048_152432.mp4
+        - Eem_ch04_20240619_152432_155816.mp4
+        - Eem_ch04_20240619_155816_163200.mp4
+        - Eem_ch04_20240619_163200_170544.mp4
+        - Eem_ch04_20240619_170544_173927.mp4
+        - Eem_ch04_20240619_173927_180032.mp4
+        - Eem_ch04_20240619_180032_183416.mp4
+        - Eem_ch04_20240619_183416_190800.mp4
+        - Eem_ch04_20240619_190800_194144.mp4
+        - Eem_ch04_20240619_194144_201528.mp4
+        - Eem_ch04_20240619_201528_204912.mp4
+        - Eem_ch04_20240619_204912_212256.mp4
+        - Eem_ch04_20240619_212256_215640.mp4
+        - Eem_ch04_20240619_215640_223024.mp4
+        - Eem_ch04_20240619_223024_230408.mp4
+        - Eem_ch04_20240619_230408_233752.mp4
+        - Eem_ch04_20240619_233752_235956.mp4
+    ocr:
+      roi: [465, 30, 770, 65]
+      clock_style: dmy_nospace
+      qc_window: ["2024-06-19T06:03:43", "2024-06-19T23:59:56"]   # first video start .. last video end
+      table: re-run                 # the first OCR table of this session was overwritten; re-run with 02
+    tracking:
+      prompt_file: BoundingBoxes_Eem_0619_0603_30.txt   # calf '9, black' only; the second prompt file BoundingBoxes_Eem_0619_0609.txt lists all five calves
+      chunks: [1, 108]
+      calves_tracked: ["9, black"]
+    event_log:
+      source: GroundTruth_Eem_Ch04_20240619_060343_20240619_235951.csv
+      # The Comment column was lost when three partial exports were merged; 08 restores it row by row from the
+      # partial exports (paths relative to data_root, original layout).
+      comments_from:
+        - Ground Truth Backup/GroundTruth_Eem_20240619_0603_0926.csv
+        - Ground Truth Backup/GroundTruth_Eem_20240619_0926_1834.csv
+        - Ground Truth Backup/GroundTruth_Eem_20240619_1834_2359.csv
+    labels: true

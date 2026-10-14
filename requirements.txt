@@ -1,0 +1,24 @@
+# Python packages used by the notebooks. Databricks ML runtimes already provide pyspark, pandas, numpy, pyarrow,
+# matplotlib, torch and torchvision. Versions are pinned only where the runs that produced the dataset recorded them.
+
+pyyaml                       # all notebooks (config/sessions.yaml)
+opencv-python==4.11.0.86     # 01 decoding, 02 OCR, 04, 05, 09 (the OCR runs printed OpenCV 4.11.0)
+pytesseract                  # 02, 09; needs the Tesseract 4.1.1 binary (config/install_ocr.sh)
+pillow                       # 02, 04, 09
+pandas                       # 03, 06, 07, 08, 09 (2.2.3 in the label run)
+numpy
+pyarrow                      # 03, 09 (parquet OCR tables)
+pyspark                      # 02, 03, 06, 07 (provided by Databricks)
+openpyxl                     # 06, 08 (Observer XT .xlsx export of the pilot day)
+matplotlib                   # 04
+ultralytics                  # 04, YOLO12x initial boxes (version not recorded; any release with YOLO12 support)
+torch                        # 04, 05 (versions of the GPU runtime not recorded)
+torchvision
+# 05: SAMURAI is installed from source, not from PyPI:
+#     git clone https://github.com/yangchris11/samurai.git && pip install -e samurai/sam2
+lmdb                         # 05 (SAMURAI dependencies)
+scipy
+loguru
+tikzplotlib
+jpeg4py
+huggingface_hub[hf_xet]      # 08 (huggingface_hub 2.0.0 with hf_xet 1.6.0 were used)

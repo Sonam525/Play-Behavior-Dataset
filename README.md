@@ -3,7 +3,7 @@
 Code that produced the derived files of the dataset
 
 **Video recordings and play behaviour annotations of group-housed dairy calves on two Dutch farms**
-Dataset: https://huggingface.co/datasets/Sonam5/Calf-Play-Behavior-Dataset (DOI: https://doi.org/10.57967/hf/10695)
+Dataset: https://huggingface.co/datasets/Sonam5/Calf-Play-Behavior-Dataset (DOI: https://doi.org/10.57967/hf/10912)
 
 The dataset contains video of group-housed dairy calves from two farms in the Netherlands (**Farm A**, a research
 and teaching dairy farm, recorded in April 2024 (recording `FarmA_R1`), June 2024 (`FarmA_R2`) and May 2025
@@ -215,7 +215,7 @@ Model weights are not included: Ultralytics downloads `yolo12x.pt` automatically
 If you use the data or this code, please cite the dataset and its Data Descriptor:
 
 > Yang, H., Lesscher, H., Liu, E. & Hostens, M. Video recordings and play behaviour annotations of group-housed dairy
-> calves on two Dutch farms. Hugging Face https://doi.org/10.57967/hf/10695 (2026).
+> calves on two Dutch farms. Hugging Face https://doi.org/10.57967/hf/10912 (2026).
 
 > Yang, H., Lesscher, H., Liu, E. & Hostens, M. Video recordings and play behaviour annotations of group-housed dairy
 > calves on two Dutch farms. *Scientific Data* (submitted).
@@ -226,7 +226,7 @@ If you use the data or this code, please cite the dataset and its Data Descripto
   title     = {Video recordings and play behaviour annotations of group-housed dairy calves on two Dutch farms},
   year      = {2026},
   publisher = {Hugging Face},
-  doi       = {10.57967/hf/10695},
+  doi       = {10.57967/hf/10912},
   url       = {https://huggingface.co/datasets/Sonam5/Calf-Play-Behavior-Dataset}
 }
 ```

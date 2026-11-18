@@ -67,6 +67,28 @@ study. This repository contains only the steps that produced files in the datase
 The other metadata tables (`metadata/sessions.csv`, `videos.csv`, `calves.csv`, `ethogram.csv`),
 `metadata/known_issues.md` and the README files document the release and are part of the dataset itself.
 
+## Person masking (version 1.2)
+
+The release on Hugging Face is version 1.2, in which people in the footage are covered by a mosaic in the videos and
+in the JPEG frames. This masking step was applied after the steps in this repository and is not part of this code. It
+was done with OpenVeil (https://github.com/Sonam525/OpenVeil) and its released verifier weights
+(https://huggingface.co/Sonam5/OpenVeil-Verifier-DINOv3-ViT-L16). The dataset card's Person masking section and
+OpenVeil's [case study](https://github.com/Sonam525/OpenVeil/blob/main/docs/case_study.md) give the full procedure and
+evaluation. In short:
+
+* 1,023 of the 1,173 videos were masked; the other 150 had no detection and are byte-identical.
+* 270 of the 372 frame shards changed (129,011 of the 1,106,110 JPEGs, 11.7%).
+* 7.7% of the frames of the masked videos carry a mosaic.
+* In a human check of 731 everyday frames, all 172 people in them were covered.
+
+The data descriptor describes the recordings and annotations; version 1.2 leaves them unchanged except for the
+mosaic. Annotations were made, and labels, the frame index and the tracking files were computed, on the unmasked
+footage and were not changed, so OCR or tracking re-run with this code on the masked videos can differ where a mosaic
+covers the clock or a calf. Some brief, partial or night appearances of people may remain unmasked. If you find one,
+please do not post any details in public: open a discussion titled "Privacy report" on the dataset repository, with no
+other details, and the authors will contact you privately (please make sure your Hugging Face profile lists a way to
+reach you).
+
 ## Annotations
 
 The observers' Observer XT exports were checked and corrected by the authors (placeholder rows, a calf-name variant,
